@@ -6,6 +6,7 @@ Created on Wed Jun 24 13:23:33 2020
 """
 
 import numpy as np
+np.random.seed(1234)
 import godunov as g
 import neural_network as nn
 

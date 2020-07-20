@@ -12,6 +12,9 @@ import keras.backend as K
 import numpy as np
 np.random.seed(1234)
 
+from tensorflow import set_random_seed
+set_random_seed(2)
+
 import matplotlib.pyplot as plt
 
 class NeuralNetwork():
