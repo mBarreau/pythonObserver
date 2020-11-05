@@ -13,13 +13,13 @@ import numpy as np
 np.random.seed(1234)
 
 from tensorflow import set_random_seed
-set_random_seed(2)
+set_random_seed(1234)
 
 import matplotlib.pyplot as plt
 
 class NeuralNetwork():
     
-    def __init__(self, N_neurons, Vf=1, gamma=0.05, mu1=1, mu2=0):
+    def __init__(self, N_neurons, Vf=1, gamma=0.005, mu1=1, mu2=0):
         self.Vf = Vf
         self.gamma = gamma
         self.mu1 = mu1
@@ -33,13 +33,16 @@ class NeuralNetwork():
             N_neurons = self.N_neurons            
         
         input_tensor = Input(shape=(2,))
+        input_isPhysics = Input(shape=(1,))
+        
         hidden = input_tensor
         for i in range(len(N_neurons)):
             hidden = Dense(N_neurons[i], activation='relu')(hidden)
         output_tensor = Dense(1, activation='linear')(hidden)
-        self.model = Model(input_tensor, output_tensor)
         
-        self.model.compile(loss=self.custom_loss_wrapper(input_tensor), optimizer="adam")
+        self.model = Model([input_tensor, input_isPhysics], output_tensor)
+        
+        self.model.compile(loss=self.custom_loss_wrapper(input_tensor, input_isPhysics), optimizer="adam")
         
     def updateMu(self, mu1=-1, mu2=-1):
         if mu1 >= 0:
@@ -51,17 +54,22 @@ class NeuralNetwork():
     def f(self, u, ux, uxx):
         return -self.Vf*(1-2*u)*ux + self.gamma*uxx
     
-    def fit(self, x_train, t_train, z_train, epochs=200):
+    def fit(self, x_train, t_train, z_train, isPhysics=np.nan, epochs=200):
         xt_train = np.zeros((x_train.shape[0],2))
+        
         for i in range(x_train.shape[0]):
             xt_train[i,:] = [x_train[i], t_train[i]]
         epochs_train = epochs
-        history = self.model.fit(xt_train, z_train, epochs=epochs_train, verbose=1)
+        
+        if np.any(np.isnan(isPhysics)):
+            isPhysics = np.zeros(x_train.shape)
+        
+        history = self.model.fit([xt_train, isPhysics], z_train, epochs=epochs_train, verbose=1)
         return history
     
-    def custom_loss_wrapper(self,input_tensor):
+    def custom_loss_wrapper(self, input_tensor, isPhysics):
         def custom_loss(u_true, u_pred):
-            MSEu = K.mean(K.square(u_pred - u_true), axis=-1)
+            MSEu = K.mean(K.square(u_pred - u_true)*(1-isPhysics), axis=-1)
             
             # x = K.slice(input_tensor, [0, 0], [-1, 1])
             # t = K.slice(input_tensor, [0, 1], [-1, 1])
@@ -88,7 +96,7 @@ class NeuralNetwork():
         else:
             return self.predict([x], [t])
         
-    def plot(self, axisPlot):
+    def plot(self, axisPlot, vmin=np.nan, vmax=np.nan):
         x = axisPlot[0]
         t = axisPlot[1]
         
@@ -101,12 +109,15 @@ class NeuralNetwork():
             for j in range(0, Nt):
                 XY_prediction[k] = np.array([x[i], t[j]])
                 k = k + 1
-        Z_prediction = self.model.predict(XY_prediction)
+        Z_prediction = self.model.predict([XY_prediction, np.zeros((Nx*Nt,1))])
         Z_prediction = Z_prediction.reshape(Nx, Nt)
         
         fig = plt.figure(figsize=(7.5, 5))
         X, Y = np.meshgrid(t, x)
-        plt.pcolor(X, Y, Z_prediction)
+        if np.isnan(vmin) or np.isnan(vmax):
+            plt.pcolor(X, Y, Z_prediction)
+        else:
+            plt.pcolor(X, Y, Z_prediction, vmin=vmin, vmax=vmax)
         plt.xlabel('Time [h]')
         plt.ylabel('Position [km]')
         plt.xlim(min(t), max(t))
